@@ -10,8 +10,8 @@ export type FinanceRow = {
   ltv: number | null;
   ltvCac: number | null;
   cacPayback: number | null;
-  organicSales: number | null;
-  referralSales: number | null;
+  organicSalesPct: number | null;
+  referralRate: number | null;
   totalSales: number | null;
   dataStatus: string;
 };

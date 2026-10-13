@@ -53,8 +53,8 @@ function mapRows(values: unknown[][]): FinanceRow[] {
     businessUnit: String(row[0] ?? ""), date: serialToDate(row[1]), mrr: numberOrNull(row[2]) ?? 0,
     grossMargin: numberOrNull(row[3]), netMargin: numberOrNull(row[4]), arppu: numberOrNull(row[5]),
     cac: numberOrNull(row[6]), churnRate: numberOrNull(row[7]), ltv: numberOrNull(row[8]),
-    ltvCac: numberOrNull(row[9]), cacPayback: numberOrNull(row[10]), organicSales: numberOrNull(row[11]),
-    referralSales: numberOrNull(row[12]), totalSales: numberOrNull(row[13]), dataStatus: String(row[14] ?? ""),
+    ltvCac: numberOrNull(row[9]), cacPayback: numberOrNull(row[10]), organicSalesPct: numberOrNull(row[11]),
+    referralRate: numberOrNull(row[12]), totalSales: numberOrNull(row[13]), dataStatus: String(row[14] ?? ""),
   })).filter((row) => row.businessUnit && row.date && row.dataStatus === "Ready");
 }
 
@@ -82,7 +82,7 @@ const demoSeed: DemoSeed[] = [
 
 const demoRows: FinanceRow[] = demoSeed.map(([businessUnit, date, mrr, grossMargin, netMargin, arppu, cac, churnRate, ltv, ltvCac, cacPayback]) => ({
   businessUnit, date, mrr, grossMargin, netMargin, arppu, cac, churnRate, ltv, ltvCac, cacPayback,
-  organicSales: null, referralSales: null, totalSales: null, dataStatus: "Ready",
+  organicSalesPct: null, referralRate: null, totalSales: null, dataStatus: "Ready",
 }));
 
 export async function getFinanceData(): Promise<FinanceData> {

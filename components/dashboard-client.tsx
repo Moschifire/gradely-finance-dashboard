@@ -43,16 +43,13 @@ function MarginChart({ rows }: { rows: FinanceRow[] }) {
 }
 
 function SalesMix({ row }: { row: FinanceRow }) {
-  const organic = Math.max(row.organicSales ?? 0, 0);
-  const referral = Math.max(row.referralSales ?? 0, 0);
-  const total = Math.max(row.totalSales ?? organic + referral, organic + referral);
-  const other = Math.max(total - organic - referral, 0);
-  const organicShare = total ? organic / total : 0;
-  const referralShare = total ? referral / total : 0;
-  const hasData = row.organicSales != null || row.referralSales != null || row.totalSales != null;
+  const organic = Math.max(Math.min(row.organicSalesPct ?? 0, 1), 0);
+  const referral = Math.max(Math.min(row.referralRate ?? 0, 1 - organic), 0);
+  const paid = Math.max(1 - organic - referral, 0);
+  const hasData = row.organicSalesPct != null || row.referralRate != null;
   return <article className="chart-card sales-mix"><header><h3>Sales channel mix</h3><p>How sales are attributed in {longMonth(row.date)}</p></header>
-    {hasData ? <><div className="donut" style={{ background: `conic-gradient(#60a5fa 0 ${organicShare * 100}%, #a78bfa ${organicShare * 100}% ${(organicShare + referralShare) * 100}%, #334155 ${(organicShare + referralShare) * 100}% 100%)` }}><span>{money.format(total)}</span><small>total sales</small></div>
-      <div className="mix-legend"><span><i className="legend-blue" /> Organic <b>{money.format(organic)}</b></span><span><i className="legend-purple" /> Referral <b>{money.format(referral)}</b></span><span><i className="legend-slate" /> Other <b>{money.format(other)}</b></span></div></> : <div className="no-chart-data">Sales-channel data has not been recorded for this month.</div>}
+    {hasData ? <><div className="donut" style={{ background: `conic-gradient(#60a5fa 0 ${organic * 100}%, #a78bfa ${organic * 100}% ${(organic + referral) * 100}%, #334155 ${(organic + referral) * 100}% 100%)` }}><span>{percent(organic + referral)}</span><small>organic + referral</small></div>
+      <div className="mix-legend"><span><i className="legend-blue" /> Organic <b>{percent(organic)}</b></span><span><i className="legend-purple" /> Referral <b>{percent(referral)}</b></span><span><i className="legend-slate" /> Other <b>{percent(paid)}</b></span></div></> : <div className="no-chart-data">Sales-channel data has not been recorded for this month.</div>}
   </article>;
 }
 
@@ -99,7 +96,6 @@ export default function DashboardClient({ initialData, source, updatedAt, connec
     { label: "Gross margin %", value: percent(latest.grossMargin), delta: change(latest.grossMargin, previous?.grossMargin ?? null) },
     { label: "Net profit %", value: percent(latest.netMargin), delta: change(latest.netMargin, previous?.netMargin ?? null) },
     { label: "ARPPU", value: latest.arppu == null ? "—" : money.format(latest.arppu), delta: change(latest.arppu, previous?.arppu ?? null) },
-    { label: "Total sales", value: latest.totalSales == null ? "—" : money.format(latest.totalSales), delta: change(latest.totalSales, previous?.totalSales ?? null) },
     { label: "CAC", value: latest.cac == null ? "—" : money.format(latest.cac), delta: change(latest.cac, previous?.cac ?? null), intent: "warning" as const },
     { label: "Lifetime value", value: latest.ltv == null ? "—" : money.format(latest.ltv), delta: change(latest.ltv, previous?.ltv ?? null) },
     { label: "LTV / CAC", value: latest.ltvCac == null ? "—" : `${number.format(latest.ltvCac)}x`, delta: change(latest.ltvCac, previous?.ltvCac ?? null), intent: "neutral" as const },
