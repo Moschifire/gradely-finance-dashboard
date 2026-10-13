@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import Image from "next/image";
 import type { FinanceRow } from "../lib/types";
 
 type Props = { initialData: FinanceRow[]; source: "live" | "demo"; updatedAt: string; connectionMessage: string | null };
@@ -102,7 +103,7 @@ export default function DashboardClient({ initialData, source, updatedAt, connec
     { label: "Churn rate", value: percent(latest.churnRate), delta: change(latest.churnRate, previous?.churnRate ?? null), intent: "warning" as const },
   ];
   return <main className="shell">
-    <header className="hero"><div><span className="eyebrow">GRADELY</span><h1>Gradely Finance Dashboard</h1><p>2026 · Real-time financial insights and analytics</p></div>
+    <header className="hero"><div><Image className="gradely-logo" src="/gradely-logo.png" alt="Gradely" width={123} height={31} priority /><h1>Gradely Finance Dashboard</h1><p>2026 · Real-time financial insights and analytics</p></div>
       <div className="controls"><label>Reporting period<select value={period} onChange={(event) => setPeriod(event.target.value as Period)}><optgroup label="Reporting windows"><option value="ytd">Year to date</option><option value="3m">Last 3 months</option><option value="6m">Last 6 months</option><option value="all">All periods</option></optgroup><optgroup label="Quarters">{quarterOptions.map((quarter) => <option key={quarter.value} value={`quarter:${quarter.value}`}>{quarter.label}</option>)}</optgroup><optgroup label="Months">{unitRows.map((row) => <option key={row.date} value={`month:${row.date}`}>{longMonth(row.date)}</option>)}</optgroup></select></label>
         <label>Business unit<select value={unit} onChange={(event) => { setUnit(event.target.value); setPeriod("ytd"); }}>{units.map((item) => <option key={item}>{item}</option>)}</select></label></div>
     </header>
