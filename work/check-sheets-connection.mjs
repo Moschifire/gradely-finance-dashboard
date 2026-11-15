@@ -17,7 +17,7 @@ const assertion = `${header}.${claims}.${signer.sign(key).toString("base64url")}
 const auth = await fetch("https://oauth2.googleapis.com/token", { method: "POST", headers: { "content-type": "application/x-www-form-urlencoded" }, body: new URLSearchParams({ grant_type: "urn:ietf:params:oauth:grant-type:jwt-bearer", assertion }) });
 if (!auth.ok) { console.log(`Authorization failed (${auth.status}): ${(await auth.text()).replace(/"private_key"[^,}]*/g, '"private_key":"[redacted]"')}`); process.exit(1); }
 const { access_token: token } = await auth.json();
-const response = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${env.GOOGLE_SHEETS_ID}/values/${encodeURIComponent("Calculated Metrics!A1:O5")}?valueRenderOption=UNFORMATTED_VALUE`, { headers: { Authorization: `Bearer ${token}` } });
+const response = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${env.GOOGLE_SHEETS_ID}/values/${encodeURIComponent("Calculated Metrics!A:O")}?valueRenderOption=UNFORMATTED_VALUE&dateTimeRenderOption=SERIAL_NUMBER`, { headers: { Authorization: `Bearer ${token}` } });
 if (!response.ok) { console.log(`Sheets read failed (${response.status}): ${await response.text()}`); process.exit(1); }
 const payload = await response.json();
 console.log(`Sheets read succeeded. Returned ${payload.values?.length ?? 0} rows from Calculated Metrics.`);

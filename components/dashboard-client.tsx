@@ -14,11 +14,11 @@ const shortMonth = (date: string) => new Intl.DateTimeFormat("en", { month: "sho
 const longMonth = (date: string) => new Intl.DateTimeFormat("en", { month: "long", year: "numeric" }).format(new Date(`${date}T00:00:00Z`));
 const change = (current: number | null, previous: number | null) => current != null && previous != null && previous !== 0 ? ((current - previous) / Math.abs(previous)) * 100 : null;
 
-function MetricCard({ label, value, delta, intent = "positive" }: { label: string; value: string; delta?: number | null; intent?: "positive" | "warning" | "neutral" }) {
+function MetricCard({ label, value, delta, intent = "positive", caption, comparisonLabel = "prior month" }: { label: string; value: string; delta?: number | null; intent?: "positive" | "warning" | "neutral"; caption?: string; comparisonLabel?: string }) {
   const up = (delta ?? 0) >= 0;
   return <article className="metric-card">
     <p>{label}</p><strong>{value}</strong>
-    {delta != null ? <span className={`pill ${intent === "warning" ? "warning" : intent === "neutral" ? "neutral" : up ? "positive" : "negative"}`}>{up ? "▲" : "▼"} {Math.abs(delta).toFixed(1)}% vs prior month</span> : <span className="pill neutral">No comparable prior month</span>}
+    {delta != null ? <span className={`pill ${intent === "warning" ? "warning" : intent === "neutral" ? "neutral" : up ? "positive" : "negative"}`}>{up ? "▲" : "▼"} {Math.abs(delta).toFixed(1)}% vs {comparisonLabel}</span> : <span className="pill neutral">{caption ?? "No comparable prior month"}</span>}
   </article>;
 }
 
@@ -86,13 +86,78 @@ export default function DashboardClient({ initialData, source, updatedAt, connec
       const end = `${year}-${String(startMonth + 2).padStart(2, "0")}-31`;
       return unitRows.filter((row) => row.date >= start && row.date <= end);
     }
-    const amount = period === "3m" ? 3 : period === "6m" ? 6 : period === "all" ? unitRows.length : 12;
+    if (period === "ytd") {
+      const latestYear = unitRows.at(-1)?.date.slice(0, 4);
+      return unitRows.filter((row) => row.date.startsWith(`${latestYear}-`));
+    }
+    const amount = period === "3m" ? 3 : period === "6m" ? 6 : unitRows.length;
     return unitRows.slice(Math.max(unitRows.length - amount, 0));
   }, [unitRows, period]);
   const latest = rows.at(-1);
   if (!latest) return <main className="empty">No ready records are available for this business unit.</main>;
-  const previous = rows.at(-2) ?? null;
-  const metrics = [
+  const latestIndex = unitRows.findIndex((row) => row.date === latest.date);
+  const previous = latestIndex > 0 ? unitRows[latestIndex - 1] : null;
+  const isOverview = unit === "Overview";
+  const isYtd = period === "ytd";
+  const isQuarter = period.startsWith("quarter:");
+  const isRolling = period === "3m" || period === "6m";
+  const isAggregate = isYtd || isQuarter || isRolling;
+  const previousQuarterRows = useMemo(() => {
+    if (!isQuarter) return [];
+    const [yearText, quarterText] = period.slice("quarter:".length).split("-Q");
+    const year = Number(yearText);
+    const quarter = Number(quarterText);
+    const previousYear = quarter === 1 ? year - 1 : year;
+    const previousQuarter = quarter === 1 ? 4 : quarter - 1;
+    const startMonth = (previousQuarter - 1) * 3 + 1;
+    const start = `${previousYear}-${String(startMonth).padStart(2, "0")}-01`;
+    const end = `${previousYear}-${String(startMonth + 2).padStart(2, "0")}-31`;
+    return unitRows.filter((row) => row.date >= start && row.date <= end);
+  }, [isQuarter, period, unitRows]);
+  const previousRollingRows = useMemo(() => {
+    if (!isRolling || !rows.length) return [];
+    const currentStart = unitRows.findIndex((row) => row.date === rows[0].date);
+    return currentStart >= rows.length ? unitRows.slice(currentStart - rows.length, currentStart) : [];
+  }, [isRolling, rows, unitRows]);
+  const sum = (value: (row: FinanceRow) => number | null, sourceRows = rows) => sourceRows.reduce((total, row) => total + (value(row) ?? 0), 0);
+  const average = (value: (row: FinanceRow) => number | null, sourceRows = rows) => {
+    const values = sourceRows.map(value).filter((item): item is number => item != null);
+    return values.length ? values.reduce((total, item) => total + item, 0) / values.length : null;
+  };
+  const weightedAverage = (value: (row: FinanceRow) => number | null, sourceRows = rows) => {
+    const weightedRows = sourceRows.filter((row) => value(row) != null && row.mrr > 0);
+    const totalWeight = weightedRows.reduce((total, row) => total + row.mrr, 0);
+    return totalWeight ? weightedRows.reduce((total, row) => total + (value(row) ?? 0) * row.mrr, 0) / totalWeight : null;
+  };
+  const aggregateCaption = (kind: "total" | "average" | "weighted") => {
+    const prefix = isYtd ? "Year-to-date" : isQuarter ? "Quarter" : period === "3m" ? "Last 3 months" : "Last 6 months";
+    return kind === "total" ? `${prefix} total` : kind === "weighted" ? `${prefix} weighted average` : `${prefix} monthly average`;
+  };
+  const snapshotLabel = isYtd ? `Year to date through ${longMonth(latest.date)}` : isQuarter ? `${period.slice("quarter:".length)} summary` : isRolling ? `${period === "3m" ? "Last 3" : "Last 6"} months through ${longMonth(latest.date)}` : `Performance snapshot for ${longMonth(latest.date)}`;
+  const comparisonRows = isQuarter ? previousQuarterRows : isRolling ? previousRollingRows : [];
+  const periodDelta = (current: number | null, previous: number | null) => (isQuarter || isRolling) && comparisonRows.length === rows.length ? change(current, previous) : null;
+  const metrics = isAggregate && isOverview ? [
+    { label: "MRR", value: money.format(sum((row) => row.mrr)), delta: periodDelta(sum((row) => row.mrr), sum((row) => row.mrr, comparisonRows)), caption: aggregateCaption("total") },
+    { label: "Gross margin", value: percent(weightedAverage((row) => row.grossMargin)), delta: periodDelta(weightedAverage((row) => row.grossMargin), weightedAverage((row) => row.grossMargin, comparisonRows)), caption: aggregateCaption("weighted") },
+    { label: "Net profit", value: money.format(sum((row) => row.netProfit)), delta: periodDelta(sum((row) => row.netProfit), sum((row) => row.netProfit, comparisonRows)), caption: aggregateCaption("total") },
+    { label: "Cash collected", value: money.format(sum((row) => row.cashCollected)), delta: periodDelta(sum((row) => row.cashCollected), sum((row) => row.cashCollected, comparisonRows)), caption: aggregateCaption("total") },
+    { label: "Amount owed", value: money.format(sum((row) => row.amountOwed)), delta: periodDelta(sum((row) => row.amountOwed), sum((row) => row.amountOwed, comparisonRows)), caption: aggregateCaption("total"), intent: "neutral" as const },
+  ] : isAggregate ? [
+    { label: "MRR", value: money.format(sum((row) => row.mrr)), delta: periodDelta(sum((row) => row.mrr), sum((row) => row.mrr, comparisonRows)), caption: aggregateCaption("total") },
+    { label: "Gross margin %", value: percent(weightedAverage((row) => row.grossMargin)), delta: periodDelta(weightedAverage((row) => row.grossMargin), weightedAverage((row) => row.grossMargin, comparisonRows)), caption: aggregateCaption("weighted") },
+    { label: "Net profit %", value: percent(weightedAverage((row) => row.netMargin)), delta: periodDelta(weightedAverage((row) => row.netMargin), weightedAverage((row) => row.netMargin, comparisonRows)), caption: aggregateCaption("weighted") },
+    { label: "ARPPU", value: average((row) => row.arppu) == null ? "—" : money.format(average((row) => row.arppu) ?? 0), delta: periodDelta(average((row) => row.arppu), average((row) => row.arppu, comparisonRows)), caption: aggregateCaption("average") },
+    { label: "CAC", value: average((row) => row.cac) == null ? "—" : money.format(average((row) => row.cac) ?? 0), delta: periodDelta(average((row) => row.cac), average((row) => row.cac, comparisonRows)), caption: aggregateCaption("average"), intent: "warning" as const },
+    { label: "Lifetime value", value: average((row) => row.ltv) == null ? "—" : money.format(average((row) => row.ltv) ?? 0), delta: periodDelta(average((row) => row.ltv), average((row) => row.ltv, comparisonRows)), caption: aggregateCaption("average") },
+    { label: "LTV / CAC", value: average((row) => row.ltvCac) == null ? "—" : `${number.format(average((row) => row.ltvCac) ?? 0)}x`, delta: periodDelta(average((row) => row.ltvCac), average((row) => row.ltvCac, comparisonRows)), caption: aggregateCaption("average"), intent: "neutral" as const },
+    { label: "Churn rate", value: percent(average((row) => row.churnRate)), delta: periodDelta(average((row) => row.churnRate), average((row) => row.churnRate, comparisonRows)), caption: aggregateCaption("average"), intent: "warning" as const },
+  ] : isOverview ? [
+    { label: "MRR", value: money.format(latest.mrr), delta: change(latest.mrr, previous?.mrr ?? null) },
+    { label: "Gross margin", value: percent(latest.grossMargin), delta: change(latest.grossMargin, previous?.grossMargin ?? null) },
+    { label: "Net profit", value: latest.netProfit == null ? "—" : money.format(latest.netProfit), delta: change(latest.netProfit, previous?.netProfit ?? null) },
+    { label: "Cash collected", value: latest.cashCollected == null ? "—" : money.format(latest.cashCollected), delta: change(latest.cashCollected, previous?.cashCollected ?? null) },
+    { label: "Amount owed", value: latest.amountOwed == null ? "—" : money.format(latest.amountOwed), delta: change(latest.amountOwed, previous?.amountOwed ?? null), intent: "neutral" as const },
+  ] : [
     { label: "MRR", value: money.format(latest.mrr), delta: change(latest.mrr, previous?.mrr ?? null) },
     { label: "Gross margin %", value: percent(latest.grossMargin), delta: change(latest.grossMargin, previous?.grossMargin ?? null) },
     { label: "Net profit %", value: percent(latest.netMargin), delta: change(latest.netMargin, previous?.netMargin ?? null) },
@@ -108,15 +173,14 @@ export default function DashboardClient({ initialData, source, updatedAt, connec
         <label>Business unit<select value={unit} onChange={(event) => { setUnit(event.target.value); setPeriod("ytd"); }}>{units.map((item) => <option key={item}>{item}</option>)}</select></label></div>
     </header>
     <div className={`source-status ${source}`}>{source === "live" ? "● Live Google Sheets data" : `● Demo data — ${connectionMessage}`}<span>Updated {new Date(updatedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</span></div>
-    <section><div className="section-heading"><div><h2>Key Metrics</h2><p>Performance snapshot for {longMonth(latest.date)}</p></div><span>{unit}</span></div>
-      <div className="metrics-grid">{metrics.map((metric) => <MetricCard key={metric.label} {...metric} />)}</div>
+    <section><div className="section-heading"><div><h2>Key Metrics</h2><p>{snapshotLabel}</p></div><span>{unit}</span></div>
+      <div className="metrics-grid">{metrics.map((metric) => <MetricCard key={metric.label} {...metric} comparisonLabel={isQuarter ? "previous quarter" : isRolling ? "previous period" : undefined} />)}</div>
     </section>
-    <Alerts row={latest} />
+    {!isOverview && <Alerts row={latest} />}
     <section><div className="section-heading"><div><h2>Financial Analytics</h2><p>Selected reporting window: {rows.length} month{rows.length === 1 ? "" : "s"}</p></div></div>
       <div className="charts-grid"><BarChart rows={rows} value={(row) => row.mrr} title="MRR by month" subtitle="Monthly recurring revenue" />
         <MarginChart rows={rows} />
-        <BarChart rows={rows} value={(row) => row.cac} color="red" title="Customer acquisition cost" subtitle="CAC trend over time" />
-        <SalesMix row={latest} />
+        {isOverview ? <><BarChart rows={rows} value={(row) => row.cashCollected} color="purple" title="Cash collected" subtitle="Total inflow by month" /><BarChart rows={rows} value={(row) => row.amountOwed} color="red" title="Amount owed" subtitle="Cash owed by month" /></> : <><BarChart rows={rows} value={(row) => row.cac} color="red" title="Customer acquisition cost" subtitle="CAC trend over time" /><SalesMix row={latest} /></>}
       </div>
     </section>
   </main>;

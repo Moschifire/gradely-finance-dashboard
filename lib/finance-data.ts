@@ -51,11 +51,19 @@ const numberOrNull = (value: unknown) => {
 function mapRows(values: unknown[][]): FinanceRow[] {
   return values.slice(1).map((row) => ({
     businessUnit: String(row[0] ?? ""), date: serialToDate(row[1]), mrr: numberOrNull(row[2]) ?? 0,
-    grossMargin: numberOrNull(row[3]), netMargin: numberOrNull(row[4]), arppu: numberOrNull(row[5]),
+    grossMargin: numberOrNull(row[3]), netMargin: numberOrNull(row[4]), netProfit: null, cashCollected: null, amountOwed: null, arppu: numberOrNull(row[5]),
     cac: numberOrNull(row[6]), churnRate: numberOrNull(row[7]), ltv: numberOrNull(row[8]),
     ltvCac: numberOrNull(row[9]), cacPayback: numberOrNull(row[10]), organicSalesPct: numberOrNull(row[11]),
     referralRate: numberOrNull(row[12]), totalSales: numberOrNull(row[13]), dataStatus: String(row[14] ?? ""),
   })).filter((row) => row.businessUnit && row.date && row.dataStatus === "Ready");
+}
+
+function mergeMonthlyInput(rows: FinanceRow[], values: unknown[][]): FinanceRow[] {
+  const monthlyMetrics = new Map(values.slice(1).map((row) => {
+    const key = `${String(row[0] ?? "")}::${serialToDate(row[1])}`;
+    return [key, { netProfit: numberOrNull(row[5]), cashCollected: numberOrNull(row[6]), amountOwed: numberOrNull(row[15]) }];
+  }));
+  return rows.map((row) => ({ ...row, ...monthlyMetrics.get(`${row.businessUnit}::${row.date}`) }));
 }
 
 type DemoSeed = [string, string, number, number | null, number | null, number | null, number | null, number | null, number | null, number | null, number | null];
@@ -81,7 +89,7 @@ const demoSeed: DemoSeed[] = [
 ];
 
 const demoRows: FinanceRow[] = demoSeed.map(([businessUnit, date, mrr, grossMargin, netMargin, arppu, cac, churnRate, ltv, ltvCac, cacPayback]) => ({
-  businessUnit, date, mrr, grossMargin, netMargin, arppu, cac, churnRate, ltv, ltvCac, cacPayback,
+  businessUnit, date, mrr, grossMargin, netMargin, netProfit: netMargin == null ? null : netMargin * mrr, cashCollected: null, amountOwed: null, arppu, cac, churnRate, ltv, ltvCac, cacPayback,
   organicSalesPct: null, referralRate: null, totalSales: null, dataStatus: "Ready",
 }));
 
@@ -89,14 +97,20 @@ export async function getFinanceData(): Promise<FinanceData> {
   if (!spreadsheetId || !serviceAccount || !privateKey) return { rows: demoRows, source: "demo", updatedAt: new Date().toISOString(), connectionMessage: "Add the Google Sheets variables to .env.local to load live data." };
   try {
     const token = await getAccessToken();
-    const range = encodeURIComponent("Calculated Metrics!A:O");
-    const response = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${range}?valueRenderOption=UNFORMATTED_VALUE&dateTimeRenderOption=SERIAL_NUMBER`, {
+    const calculatedRange = encodeURIComponent("Calculated Metrics!A:O");
+    const monthlyInputRange = encodeURIComponent("Monthly Input!A:P");
+    const response = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values:batchGet?ranges=${calculatedRange}&ranges=${monthlyInputRange}&valueRenderOption=UNFORMATTED_VALUE&dateTimeRenderOption=SERIAL_NUMBER`, {
       headers: { Authorization: `Bearer ${token}` }, next: { revalidate: 300 },
     });
-    if (!response.ok) throw new Error("Unable to read Google Sheets values.");
-    const payload = await response.json() as { values?: unknown[][] };
-    return { rows: mapRows(payload.values ?? []), source: "live", updatedAt: new Date().toISOString(), connectionMessage: null };
-  } catch {
-    return { rows: demoRows, source: "demo", updatedAt: new Date().toISOString(), connectionMessage: "Google Sheets returned a permission error. Confirm the exact service-account email in .env.local has Viewer access to the spreadsheet in GOOGLE_SHEETS_ID." };
+    if (!response.ok) throw new Error(`Google Sheets read failed with status ${response.status}.`);
+    const payload = await response.json() as { valueRanges?: Array<{ values?: unknown[][] }> };
+    const calculatedRows = mapRows(payload.valueRanges?.[0]?.values ?? []);
+    return { rows: mergeMonthlyInput(calculatedRows, payload.valueRanges?.[1]?.values ?? []), source: "live", updatedAt: new Date().toISOString(), connectionMessage: null };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "";
+    const connectionMessage = message.includes("status 403")
+      ? "Google Sheets returned a permission error. Confirm the exact service-account email in .env.local has Viewer access to the spreadsheet in GOOGLE_SHEETS_ID."
+      : "Google Sheets could not be reached from this server. Check its network access and the configured Google Sheets settings.";
+    return { rows: demoRows, source: "demo", updatedAt: new Date().toISOString(), connectionMessage };
   }
 }
