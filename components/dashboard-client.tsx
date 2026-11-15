@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Image from "next/image";
 import type { FinanceRow } from "../lib/types";
 
@@ -66,6 +66,22 @@ export default function DashboardClient({ initialData, source, updatedAt, connec
   const units = useMemo(() => Array.from(new Set(initialData.map((row) => row.businessUnit))), [initialData]);
   const [unit, setUnit] = useState(units.includes("Overview") ? "Overview" : units[0] ?? "Overview");
   const [period, setPeriod] = useState<Period>("ytd");
+  const [restoredState, setRestoredState] = useState(false);
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const savedUnit = params.get("unit");
+    const savedPeriod = params.get("period");
+    if (savedUnit && units.includes(savedUnit)) setUnit(savedUnit);
+    if (savedPeriod && (savedPeriod === "all" || savedPeriod === "3m" || savedPeriod === "6m" || savedPeriod === "ytd" || savedPeriod.startsWith("month:") || savedPeriod.startsWith("quarter:"))) setPeriod(savedPeriod as Period);
+    setRestoredState(true);
+  }, [units]);
+  useEffect(() => {
+    if (!restoredState) return;
+    const url = new URL(window.location.href);
+    url.searchParams.set("unit", unit);
+    url.searchParams.set("period", period);
+    window.history.replaceState(null, "", url);
+  }, [period, restoredState, unit]);
   const unitRows = useMemo(() => initialData.filter((row) => row.businessUnit === unit).sort((a, b) => a.date.localeCompare(b.date)), [initialData, unit]);
   const quarterOptions = useMemo(() => {
     const availableDates = new Set(unitRows.map((row) => row.date));
