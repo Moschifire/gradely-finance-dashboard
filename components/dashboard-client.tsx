@@ -27,7 +27,7 @@ function BarChart({ rows, value, color = "blue", title, subtitle, format = money
   const highest = Math.max(...values, 1);
   return <article className="chart-card"><header><h3>{title}</h3><p>{subtitle}</p></header>
     <div className="bar-chart">{rows.map((row, index) => <div className="bar-wrap" key={row.date}>
-      <div className={`bar ${color}`} title={`${longMonth(row.date)}: ${format(values[index])}`} style={{ height: `${Math.max((values[index] / highest) * 100, values[index] ? 3 : 0)}%` }} />
+      <div className={`bar ${color}`} title={`${longMonth(row.date)}: ${format(values[index])}`} style={{ height: `${Math.max((values[index] / highest) * 100, values[index] ? 3 : 0)}%` }}><span className="bar-value">{format(values[index])}</span></div>
       <span>{shortMonth(row.date)}</span>
     </div>)}</div>
   </article>;
@@ -153,13 +153,13 @@ export default function DashboardClient({ initialData, source, updatedAt, connec
   const comparisonRows = isQuarter ? previousQuarterRows : isRolling ? previousRollingRows : [];
   const periodDelta = (current: number | null, previous: number | null) => (isQuarter || isRolling) && comparisonRows.length === rows.length ? change(current, previous) : null;
   const metrics = isAggregate && isOverview ? [
-    { label: "MRR", value: money.format(sum((row) => row.mrr)), delta: periodDelta(sum((row) => row.mrr), sum((row) => row.mrr, comparisonRows)), caption: aggregateCaption("total") },
+    { label: "MRR", value: money.format(average((row) => row.mrr) ?? 0), delta: periodDelta(average((row) => row.mrr), average((row) => row.mrr, comparisonRows)), caption: aggregateCaption("average") },
     { label: "Gross margin", value: percent(weightedAverage((row) => row.grossMargin)), delta: periodDelta(weightedAverage((row) => row.grossMargin), weightedAverage((row) => row.grossMargin, comparisonRows)), caption: aggregateCaption("weighted") },
     { label: "Net profit", value: money.format(sum((row) => row.netProfit)), delta: periodDelta(sum((row) => row.netProfit), sum((row) => row.netProfit, comparisonRows)), caption: aggregateCaption("total") },
     { label: "Cash collected", value: money.format(sum((row) => row.cashCollected)), delta: periodDelta(sum((row) => row.cashCollected), sum((row) => row.cashCollected, comparisonRows)), caption: aggregateCaption("total") },
     { label: "Amount owed", value: money.format(sum((row) => row.amountOwed)), delta: periodDelta(sum((row) => row.amountOwed), sum((row) => row.amountOwed, comparisonRows)), caption: aggregateCaption("total"), intent: "neutral" as const },
   ] : isAggregate ? [
-    { label: "MRR", value: money.format(sum((row) => row.mrr)), delta: periodDelta(sum((row) => row.mrr), sum((row) => row.mrr, comparisonRows)), caption: aggregateCaption("total") },
+    { label: "MRR", value: money.format(average((row) => row.mrr) ?? 0), delta: periodDelta(average((row) => row.mrr), average((row) => row.mrr, comparisonRows)), caption: aggregateCaption("average") },
     { label: "Gross margin %", value: percent(weightedAverage((row) => row.grossMargin)), delta: periodDelta(weightedAverage((row) => row.grossMargin), weightedAverage((row) => row.grossMargin, comparisonRows)), caption: aggregateCaption("weighted") },
     { label: "Net profit %", value: percent(weightedAverage((row) => row.netMargin)), delta: periodDelta(weightedAverage((row) => row.netMargin), weightedAverage((row) => row.netMargin, comparisonRows)), caption: aggregateCaption("weighted") },
     { label: "ARPPU", value: average((row) => row.arppu) == null ? "—" : money.format(average((row) => row.arppu) ?? 0), delta: periodDelta(average((row) => row.arppu), average((row) => row.arppu, comparisonRows)), caption: aggregateCaption("average") },
