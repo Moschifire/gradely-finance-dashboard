@@ -33,6 +33,23 @@ function BarChart({ rows, value, color = "blue", title, subtitle, format = money
   </article>;
 }
 
+function CashSpendChart({ rows }: { rows: FinanceRow[] }) {
+  const cashValues = rows.map((row) => Math.max(row.cashCollected ?? 0, 0));
+  const spendValues = rows.map((row) => Math.max(row.operatingExpenses ?? 0, 0));
+  const highest = Math.max(...cashValues, ...spendValues, 1);
+  const height = (value: number) => `${Math.max((value / highest) * 100, value ? 3 : 0)}%`;
+  return <article className="chart-card"><header><h3>Cash collected vs spend</h3><p>Total inflow compared with operating expenses by month</p></header>
+    <div className="legend"><span><i className="legend-purple" /> Cash collected</span><span><i className="legend-red" /> Spend</span></div>
+    <div className="grouped-chart">{rows.map((row, index) => <div className="group" key={row.date}>
+      <div className="group-bars">
+        <i className="cash-bar" title={`Cash collected: ${money.format(cashValues[index])}`} style={{ height: height(cashValues[index]), bottom: 0 }}><span className="margin-value">Cash: {money.format(cashValues[index])}</span></i>
+        <i className="spend-bar" title={`Spend: ${row.operatingExpenses == null ? "—" : money.format(spendValues[index])}`} style={{ height: height(spendValues[index]), bottom: 0 }}><span className="margin-value">Spend: {row.operatingExpenses == null ? "—" : money.format(spendValues[index])}</span></i>
+      </div>
+      <span>{shortMonth(row.date)}</span>
+    </div>)}</div>
+  </article>;
+}
+
 function MarginChart({ rows }: { rows: FinanceRow[] }) {
   const marginValues = rows.flatMap((row) => [row.grossMargin, row.netMargin]).filter((value): value is number => value != null);
   const minimum = Math.min(0, ...marginValues);
@@ -217,7 +234,7 @@ export default function DashboardClient({ initialData, source, updatedAt, connec
     <section><div className="section-heading"><div><h2>Financial Analytics</h2><p>Selected reporting window: {rows.length} month{rows.length === 1 ? "" : "s"}</p></div></div>
       <div className="charts-grid"><BarChart rows={rows} value={(row) => row.mrr} title="MRR by month" subtitle="Monthly recurring revenue" />
         <MarginChart rows={rows} />
-        {isOverview ? <><BarChart rows={rows} value={(row) => row.cashCollected} color="purple" title="Cash collected" subtitle="Total inflow by month" /><BarChart rows={rows} value={(row) => row.receivables} color="red" title="Receivables" subtitle="Receivables by month" /></> : <><BarChart rows={rows} value={(row) => row.cac} color="red" title="Customer acquisition cost" subtitle="CAC trend over time" /><SalesMix row={latest} /></>}
+        {isOverview ? <><CashSpendChart rows={rows} /><BarChart rows={rows} value={(row) => row.receivables} color="red" title="Receivables" subtitle="Receivables by month" /></> : <><BarChart rows={rows} value={(row) => row.cac} color="red" title="Customer acquisition cost" subtitle="CAC trend over time" /><SalesMix row={latest} /></>}
       </div>
     </section>
   </main>;
