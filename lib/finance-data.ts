@@ -51,7 +51,7 @@ const numberOrNull = (value: unknown) => {
 function mapRows(values: unknown[][]): FinanceRow[] {
   return values.slice(1).map((row) => ({
     businessUnit: String(row[0] ?? ""), date: serialToDate(row[1]), mrr: numberOrNull(row[2]) ?? 0,
-    grossMargin: numberOrNull(row[3]), netMargin: numberOrNull(row[4]), netProfit: null, cashCollected: null, receivables: null, operatingExpenses: null, arppu: numberOrNull(row[5]),
+    grossMargin: numberOrNull(row[3]), netMargin: numberOrNull(row[4]), netProfit: null, newMrr: null, cashCollected: null, receivables: null, operatingExpenses: null, arppu: numberOrNull(row[5]),
     cac: numberOrNull(row[6]), churnRate: numberOrNull(row[7]), ltv: numberOrNull(row[8]),
     ltvCac: numberOrNull(row[9]), cacPayback: numberOrNull(row[10]), organicSalesPct: numberOrNull(row[11]),
     referralRate: numberOrNull(row[12]), totalSales: numberOrNull(row[13]), dataStatus: String(row[14] ?? ""),
@@ -67,11 +67,16 @@ function mergeMonthlyInput(rows: FinanceRow[], values: unknown[][]): FinanceRow[
   const totalInflowIndex = indexFor("Total Inflow");
   const receivablesIndex = indexFor("Receivables");
   const opexIndex = indexFor("OPEX");
+  const organicSalesIndex = indexFor("Organic Sales");
+  const paidSalesIndex = indexFor("Paid Sales");
+  const referralSalesIndex = indexFor("Referral Sales");
   const valueAt = (row: unknown[], index: number) => index < 0 ? null : numberOrNull(row[index]);
   const monthlyMetrics = new Map(inputRows.map((row) => {
     const key = `${String(row[businessUnitIndex] ?? "")}::${serialToDate(row[dateIndex])}`;
+    const salesValues = [organicSalesIndex, paidSalesIndex, referralSalesIndex].map((index) => valueAt(row, index)).filter((value): value is number => value != null);
     return [key, {
       netProfit: valueAt(row, netProfitIndex),
+      newMrr: salesValues.length ? salesValues.reduce((total, value) => total + value, 0) : null,
       cashCollected: valueAt(row, totalInflowIndex),
       receivables: valueAt(row, receivablesIndex),
       operatingExpenses: valueAt(row, opexIndex),
@@ -103,7 +108,7 @@ const demoSeed: DemoSeed[] = [
 ];
 
 const demoRows: FinanceRow[] = demoSeed.map(([businessUnit, date, mrr, grossMargin, netMargin, arppu, cac, churnRate, ltv, ltvCac, cacPayback]) => ({
-  businessUnit, date, mrr, grossMargin, netMargin, netProfit: netMargin == null ? null : netMargin * mrr, cashCollected: null, receivables: null, operatingExpenses: null, arppu, cac, churnRate, ltv, ltvCac, cacPayback,
+  businessUnit, date, mrr, grossMargin, netMargin, netProfit: netMargin == null ? null : netMargin * mrr, newMrr: null, cashCollected: null, receivables: null, operatingExpenses: null, arppu, cac, churnRate, ltv, ltvCac, cacPayback,
   organicSalesPct: null, referralRate: null, totalSales: null, dataStatus: "Ready",
 }));
 

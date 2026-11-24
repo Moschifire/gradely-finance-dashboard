@@ -144,6 +144,7 @@ export default function DashboardClient({ initialData, source, updatedAt, connec
   const latestIndex = unitRows.findIndex((row) => row.date === latest.date);
   const previous = latestIndex > 0 ? unitRows[latestIndex - 1] : null;
   const isOverview = unit === "Overview";
+  const isTutoring = unit.toLowerCase().includes("tutoring");
   const isYtd = period === "ytd";
   const isQuarter = period.startsWith("quarter:");
   const isRolling = period === "3m" || period === "6m";
@@ -196,6 +197,7 @@ export default function DashboardClient({ initialData, source, updatedAt, connec
     { label: "Operating expenses", value: sumOrNull((row) => row.operatingExpenses) == null ? "—" : money.format(sumOrNull((row) => row.operatingExpenses) ?? 0), delta: periodDelta(sumOrNull((row) => row.operatingExpenses), sumOrNull((row) => row.operatingExpenses, comparisonRows)), caption: aggregateCaption("total"), intent: "warning" as const },
   ] : isAggregate ? [
     { label: "MRR", value: money.format(average((row) => row.mrr) ?? 0), delta: periodDelta(average((row) => row.mrr), average((row) => row.mrr, comparisonRows)), caption: aggregateCaption("average") },
+    ...(isTutoring ? [{ label: "New MRR", value: sumOrNull((row) => row.newMrr) == null ? "—" : money.format(sumOrNull((row) => row.newMrr) ?? 0), delta: periodDelta(sumOrNull((row) => row.newMrr), sumOrNull((row) => row.newMrr, comparisonRows)), caption: aggregateCaption("total") }] : []),
     { label: "Gross margin %", value: percent(weightedAverage((row) => row.grossMargin)), delta: periodDelta(weightedAverage((row) => row.grossMargin), weightedAverage((row) => row.grossMargin, comparisonRows)), caption: aggregateCaption("weighted") },
     { label: "Net profit %", value: percent(weightedAverage((row) => row.netMargin)), delta: periodDelta(weightedAverage((row) => row.netMargin), weightedAverage((row) => row.netMargin, comparisonRows)), caption: aggregateCaption("weighted") },
     { label: "ARPPU", value: average((row) => row.arppu) == null ? "—" : money.format(average((row) => row.arppu) ?? 0), delta: periodDelta(average((row) => row.arppu), average((row) => row.arppu, comparisonRows)), caption: aggregateCaption("average") },
@@ -213,6 +215,7 @@ export default function DashboardClient({ initialData, source, updatedAt, connec
     { label: "Operating expenses", value: latest.operatingExpenses == null ? "—" : money.format(latest.operatingExpenses), delta: change(latest.operatingExpenses, previous?.operatingExpenses ?? null), intent: "warning" as const },
   ] : [
     { label: "MRR", value: money.format(latest.mrr), delta: change(latest.mrr, previous?.mrr ?? null) },
+    ...(isTutoring ? [{ label: "New MRR", value: latest.newMrr == null ? "—" : money.format(latest.newMrr), delta: change(latest.newMrr, previous?.newMrr ?? null) }] : []),
     { label: "Gross margin %", value: percent(latest.grossMargin), delta: change(latest.grossMargin, previous?.grossMargin ?? null) },
     { label: "Net profit %", value: percent(latest.netMargin), delta: change(latest.netMargin, previous?.netMargin ?? null) },
     { label: "ARPPU", value: latest.arppu == null ? "—" : money.format(latest.arppu), delta: change(latest.arppu, previous?.arppu ?? null) },
