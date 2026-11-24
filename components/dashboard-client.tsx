@@ -34,10 +34,23 @@ function BarChart({ rows, value, color = "blue", title, subtitle, format = money
 }
 
 function MarginChart({ rows }: { rows: FinanceRow[] }) {
+  const marginValues = rows.flatMap((row) => [row.grossMargin, row.netMargin]).filter((value): value is number => value != null);
+  const minimum = Math.min(0, ...marginValues);
+  const maximum = Math.max(0, ...marginValues);
+  const range = Math.max(maximum - minimum, 0.01);
+  const zeroLine = ((0 - minimum) / range) * 100;
+  const barStyle = (value: number | null) => {
+    const margin = value ?? 0;
+    const height = `${Math.abs(margin) / range * 100}%`;
+    return margin >= 0 ? { height, bottom: `${zeroLine}%` } : { height, top: `${100 - zeroLine}%` };
+  };
   return <article className="chart-card"><header><h3>Profitability trend</h3><p>Gross margin and net margin by month</p></header>
     <div className="legend"><span><i className="legend-blue" /> Gross margin</span><span><i className="legend-purple" /> Net margin</span></div>
     <div className="grouped-chart">{rows.map((row) => <div className="group" key={row.date}>
-      <div className="group-bars"><i className="gross-bar" title={`Gross margin: ${percent(row.grossMargin)}`} style={{ height: `${Math.max(Math.min((row.grossMargin ?? 0) * 100, 100), 0)}%` }} /><i className="net-bar" title={`Net margin: ${percent(row.netMargin)}`} style={{ height: `${Math.max(Math.min((row.netMargin ?? 0) * 100, 100), 0)}%` }} /></div>
+      <div className="group-bars"><b className="zero-line" style={{ bottom: `${zeroLine}%` }} />
+        <i className={`gross-bar ${(row.grossMargin ?? 0) < 0 ? "negative" : ""}`} title={`Gross margin: ${percent(row.grossMargin)}`} style={barStyle(row.grossMargin)}><span className="margin-value">Gross: {percent(row.grossMargin)}</span></i>
+        <i className={`net-bar ${(row.netMargin ?? 0) < 0 ? "negative" : ""}`} title={`Net margin: ${percent(row.netMargin)}`} style={barStyle(row.netMargin)}><span className="margin-value">Net: {percent(row.netMargin)}</span></i>
+      </div>
       <span>{shortMonth(row.date)}</span>
     </div>)}</div>
   </article>;
@@ -136,6 +149,10 @@ export default function DashboardClient({ initialData, source, updatedAt, connec
     return currentStart >= rows.length ? unitRows.slice(currentStart - rows.length, currentStart) : [];
   }, [isRolling, rows, unitRows]);
   const sum = (value: (row: FinanceRow) => number | null, sourceRows = rows) => sourceRows.reduce((total, row) => total + (value(row) ?? 0), 0);
+  const sumOrNull = (value: (row: FinanceRow) => number | null, sourceRows = rows) => {
+    const values = sourceRows.map(value).filter((item): item is number => item != null);
+    return values.length ? values.reduce((total, item) => total + item, 0) : null;
+  };
   const average = (value: (row: FinanceRow) => number | null, sourceRows = rows) => {
     const values = sourceRows.map(value).filter((item): item is number => item != null);
     return values.length ? values.reduce((total, item) => total + item, 0) / values.length : null;
@@ -154,10 +171,12 @@ export default function DashboardClient({ initialData, source, updatedAt, connec
   const periodDelta = (current: number | null, previous: number | null) => (isQuarter || isRolling) && comparisonRows.length === rows.length ? change(current, previous) : null;
   const metrics = isAggregate && isOverview ? [
     { label: "MRR", value: money.format(average((row) => row.mrr) ?? 0), delta: periodDelta(average((row) => row.mrr), average((row) => row.mrr, comparisonRows)), caption: aggregateCaption("average") },
+    { label: "Total revenue", value: money.format(sum((row) => row.mrr)), delta: periodDelta(sum((row) => row.mrr), sum((row) => row.mrr, comparisonRows)), caption: aggregateCaption("total") },
     { label: "Gross margin", value: percent(weightedAverage((row) => row.grossMargin)), delta: periodDelta(weightedAverage((row) => row.grossMargin), weightedAverage((row) => row.grossMargin, comparisonRows)), caption: aggregateCaption("weighted") },
     { label: "Net profit", value: money.format(sum((row) => row.netProfit)), delta: periodDelta(sum((row) => row.netProfit), sum((row) => row.netProfit, comparisonRows)), caption: aggregateCaption("total") },
     { label: "Cash collected", value: money.format(sum((row) => row.cashCollected)), delta: periodDelta(sum((row) => row.cashCollected), sum((row) => row.cashCollected, comparisonRows)), caption: aggregateCaption("total") },
-    { label: "Amount owed", value: money.format(sum((row) => row.amountOwed)), delta: periodDelta(sum((row) => row.amountOwed), sum((row) => row.amountOwed, comparisonRows)), caption: aggregateCaption("total"), intent: "neutral" as const },
+    { label: "Receivables", value: money.format(sum((row) => row.receivables)), delta: periodDelta(sum((row) => row.receivables), sum((row) => row.receivables, comparisonRows)), caption: aggregateCaption("total"), intent: "neutral" as const },
+    { label: "Operating expenses", value: sumOrNull((row) => row.operatingExpenses) == null ? "—" : money.format(sumOrNull((row) => row.operatingExpenses) ?? 0), delta: periodDelta(sumOrNull((row) => row.operatingExpenses), sumOrNull((row) => row.operatingExpenses, comparisonRows)), caption: aggregateCaption("total"), intent: "warning" as const },
   ] : isAggregate ? [
     { label: "MRR", value: money.format(average((row) => row.mrr) ?? 0), delta: periodDelta(average((row) => row.mrr), average((row) => row.mrr, comparisonRows)), caption: aggregateCaption("average") },
     { label: "Gross margin %", value: percent(weightedAverage((row) => row.grossMargin)), delta: periodDelta(weightedAverage((row) => row.grossMargin), weightedAverage((row) => row.grossMargin, comparisonRows)), caption: aggregateCaption("weighted") },
@@ -169,10 +188,12 @@ export default function DashboardClient({ initialData, source, updatedAt, connec
     { label: "Churn rate", value: percent(average((row) => row.churnRate)), delta: periodDelta(average((row) => row.churnRate), average((row) => row.churnRate, comparisonRows)), caption: aggregateCaption("average"), intent: "warning" as const },
   ] : isOverview ? [
     { label: "MRR", value: money.format(latest.mrr), delta: change(latest.mrr, previous?.mrr ?? null) },
+    { label: "Total revenue", value: money.format(latest.mrr), delta: change(latest.mrr, previous?.mrr ?? null) },
     { label: "Gross margin", value: percent(latest.grossMargin), delta: change(latest.grossMargin, previous?.grossMargin ?? null) },
     { label: "Net profit", value: latest.netProfit == null ? "—" : money.format(latest.netProfit), delta: change(latest.netProfit, previous?.netProfit ?? null) },
     { label: "Cash collected", value: latest.cashCollected == null ? "—" : money.format(latest.cashCollected), delta: change(latest.cashCollected, previous?.cashCollected ?? null) },
-    { label: "Amount owed", value: latest.amountOwed == null ? "—" : money.format(latest.amountOwed), delta: change(latest.amountOwed, previous?.amountOwed ?? null), intent: "neutral" as const },
+    { label: "Receivables", value: latest.receivables == null ? "—" : money.format(latest.receivables), delta: change(latest.receivables, previous?.receivables ?? null), intent: "neutral" as const },
+    { label: "Operating expenses", value: latest.operatingExpenses == null ? "—" : money.format(latest.operatingExpenses), delta: change(latest.operatingExpenses, previous?.operatingExpenses ?? null), intent: "warning" as const },
   ] : [
     { label: "MRR", value: money.format(latest.mrr), delta: change(latest.mrr, previous?.mrr ?? null) },
     { label: "Gross margin %", value: percent(latest.grossMargin), delta: change(latest.grossMargin, previous?.grossMargin ?? null) },
@@ -196,7 +217,7 @@ export default function DashboardClient({ initialData, source, updatedAt, connec
     <section><div className="section-heading"><div><h2>Financial Analytics</h2><p>Selected reporting window: {rows.length} month{rows.length === 1 ? "" : "s"}</p></div></div>
       <div className="charts-grid"><BarChart rows={rows} value={(row) => row.mrr} title="MRR by month" subtitle="Monthly recurring revenue" />
         <MarginChart rows={rows} />
-        {isOverview ? <><BarChart rows={rows} value={(row) => row.cashCollected} color="purple" title="Cash collected" subtitle="Total inflow by month" /><BarChart rows={rows} value={(row) => row.amountOwed} color="red" title="Amount owed" subtitle="Cash owed by month" /></> : <><BarChart rows={rows} value={(row) => row.cac} color="red" title="Customer acquisition cost" subtitle="CAC trend over time" /><SalesMix row={latest} /></>}
+        {isOverview ? <><BarChart rows={rows} value={(row) => row.cashCollected} color="purple" title="Cash collected" subtitle="Total inflow by month" /><BarChart rows={rows} value={(row) => row.receivables} color="red" title="Receivables" subtitle="Receivables by month" /></> : <><BarChart rows={rows} value={(row) => row.cac} color="red" title="Customer acquisition cost" subtitle="CAC trend over time" /><SalesMix row={latest} /></>}
       </div>
     </section>
   </main>;

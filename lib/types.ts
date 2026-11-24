@@ -6,7 +6,8 @@ export type FinanceRow = {
   netMargin: number | null;
   netProfit: number | null;
   cashCollected: number | null;
-  amountOwed: number | null;
+  receivables: number | null;
+  operatingExpenses: number | null;
   arppu: number | null;
   cac: number | null;
   churnRate: number | null;

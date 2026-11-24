@@ -51,7 +51,7 @@ const numberOrNull = (value: unknown) => {
 function mapRows(values: unknown[][]): FinanceRow[] {
   return values.slice(1).map((row) => ({
     businessUnit: String(row[0] ?? ""), date: serialToDate(row[1]), mrr: numberOrNull(row[2]) ?? 0,
-    grossMargin: numberOrNull(row[3]), netMargin: numberOrNull(row[4]), netProfit: null, cashCollected: null, amountOwed: null, arppu: numberOrNull(row[5]),
+    grossMargin: numberOrNull(row[3]), netMargin: numberOrNull(row[4]), netProfit: null, cashCollected: null, receivables: null, operatingExpenses: null, arppu: numberOrNull(row[5]),
     cac: numberOrNull(row[6]), churnRate: numberOrNull(row[7]), ltv: numberOrNull(row[8]),
     ltvCac: numberOrNull(row[9]), cacPayback: numberOrNull(row[10]), organicSalesPct: numberOrNull(row[11]),
     referralRate: numberOrNull(row[12]), totalSales: numberOrNull(row[13]), dataStatus: String(row[14] ?? ""),
@@ -59,9 +59,23 @@ function mapRows(values: unknown[][]): FinanceRow[] {
 }
 
 function mergeMonthlyInput(rows: FinanceRow[], values: unknown[][]): FinanceRow[] {
-  const monthlyMetrics = new Map(values.slice(1).map((row) => {
-    const key = `${String(row[0] ?? "")}::${serialToDate(row[1])}`;
-    return [key, { netProfit: numberOrNull(row[5]), cashCollected: numberOrNull(row[6]), amountOwed: numberOrNull(row[15]) }];
+  const [headers = [], ...inputRows] = values;
+  const indexFor = (name: string) => headers.findIndex((header) => String(header ?? "").trim().toLowerCase() === name.toLowerCase());
+  const businessUnitIndex = indexFor("Business Unit");
+  const dateIndex = indexFor("Date");
+  const netProfitIndex = indexFor("Net Profit");
+  const totalInflowIndex = indexFor("Total Inflow");
+  const receivablesIndex = indexFor("Receivables");
+  const opexIndex = indexFor("OPEX");
+  const valueAt = (row: unknown[], index: number) => index < 0 ? null : numberOrNull(row[index]);
+  const monthlyMetrics = new Map(inputRows.map((row) => {
+    const key = `${String(row[businessUnitIndex] ?? "")}::${serialToDate(row[dateIndex])}`;
+    return [key, {
+      netProfit: valueAt(row, netProfitIndex),
+      cashCollected: valueAt(row, totalInflowIndex),
+      receivables: valueAt(row, receivablesIndex),
+      operatingExpenses: valueAt(row, opexIndex),
+    }];
   }));
   return rows.map((row) => ({ ...row, ...monthlyMetrics.get(`${row.businessUnit}::${row.date}`) }));
 }
@@ -89,7 +103,7 @@ const demoSeed: DemoSeed[] = [
 ];
 
 const demoRows: FinanceRow[] = demoSeed.map(([businessUnit, date, mrr, grossMargin, netMargin, arppu, cac, churnRate, ltv, ltvCac, cacPayback]) => ({
-  businessUnit, date, mrr, grossMargin, netMargin, netProfit: netMargin == null ? null : netMargin * mrr, cashCollected: null, amountOwed: null, arppu, cac, churnRate, ltv, ltvCac, cacPayback,
+  businessUnit, date, mrr, grossMargin, netMargin, netProfit: netMargin == null ? null : netMargin * mrr, cashCollected: null, receivables: null, operatingExpenses: null, arppu, cac, churnRate, ltv, ltvCac, cacPayback,
   organicSalesPct: null, referralRate: null, totalSales: null, dataStatus: "Ready",
 }));
 
@@ -98,7 +112,7 @@ export async function getFinanceData(): Promise<FinanceData> {
   try {
     const token = await getAccessToken();
     const calculatedRange = encodeURIComponent("Calculated Metrics!A:O");
-    const monthlyInputRange = encodeURIComponent("Monthly Input!A:P");
+    const monthlyInputRange = encodeURIComponent("Monthly Input!A:AZ");
     const response = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values:batchGet?ranges=${calculatedRange}&ranges=${monthlyInputRange}&valueRenderOption=UNFORMATTED_VALUE&dateTimeRenderOption=SERIAL_NUMBER`, {
       headers: { Authorization: `Bearer ${token}` }, next: { revalidate: 300 },
     });
